@@ -57,12 +57,17 @@ public:
   std::string str;
   std::chrono::steady_clock::time_point tp;
 
-  time_log(std::string str) : str(std::move(str)), tp(std::chrono::steady_clock::now()) {}
-  ~time_log() {
+  time_log(std::string str) noexcept : str(std::move(str)), tp(std::chrono::steady_clock::now()) {}
+  ~time_log() noexcept {
     const auto dur = std::chrono::steady_clock::now() - tp;
     const size_t mcs = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
     println(str, "took", mcs, "mcs");
   }
+
+  time_log(const time_log &copy) noexcept = delete;
+  time_log(time_log &&move) noexcept = default;
+  time_log & operator=(const time_log &copy) noexcept = delete;
+  time_log & operator=(time_log &&move) noexcept = default;
 };
 
 std::string_view get_url_full_path(const std::string_view &url) {
