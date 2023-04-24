@@ -15,14 +15,15 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 #include <exception>
 #include <iostream>
 
-using net = boost::asio;
-using ssl = net::ssl;
-using mysql = boost::mysql;
-using tcp = net::ip::tcp;
+namespace net = boost::asio;        // from <boost/asio.hpp>
+namespace ssl = net::ssl;
+namespace mysql = boost::mysql;
+using tcp = net::ip::tcp;           // from <boost/asio/ip/tcp.hpp>
 using mysql::error_code;
 
 #ifdef BOOST_ASIO_HAS_CO_AWAIT
@@ -158,8 +159,9 @@ int main_impl(int argc, char** argv) {
 
 #else
 
-void main_impl(int, char**) {
+int main_impl(int, char**) {
   std::cout << "Sorry, your compiler does not support C++20 coroutines" << std::endl;
+  return 1;
 }
 
 #endif

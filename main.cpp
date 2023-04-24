@@ -18,13 +18,15 @@
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/read_until.hpp>
+#include "lite.h"
 
 #include <boost/url.hpp>
-#include <boost/url/src.hpp>
-#include <cstdlib>
 #include <iostream>
 #include <string>
+#include <cstdlib>
 #include <chrono>
+
+//#include <boost/url/src.hpp>
 
 namespace beast = boost::beast;     // from <boost/beast.hpp>
 namespace http = beast::http;       // from <boost/beast/http.hpp>
@@ -70,252 +72,96 @@ public:
   time_log & operator=(time_log &&move) noexcept = default;
 };
 
-std::string_view get_url_full_path(const std::string_view &url) {
-  auto final_path = url;
-  const size_t found_slashes = final_path.find("//");
-  if (found_slashes != std::string_view::npos) {
-    final_path = final_path.substr(found_slashes+2);
-  }
+// std::string_view get_url_full_path(const std::string_view &url) {
+//   auto final_path = url;
+//   const size_t found_slashes = final_path.find("//");
+//   if (found_slashes != std::string_view::npos) {
+//     final_path = final_path.substr(found_slashes+2);
+//   }
 
-  const size_t first_slash = final_path.find("/");
-  if (first_slash != std::string_view::npos) {
-    final_path = final_path.substr(first_slash);
-  } else {
-    final_path = "/";
-  }
+//   const size_t first_slash = final_path.find("/");
+//   if (first_slash != std::string_view::npos) {
+//     final_path = final_path.substr(first_slash);
+//   } else {
+//     final_path = "/";
+//   }
 
-  return final_path;
-}
+//   return final_path;
+// }
 
-void get(const std::string_view &url, http::response<http::dynamic_body> &res, beast::flat_buffer &buffer) {
-  boost::url_view u(url);
-  const auto fullpath = get_url_full_path(url);
+// void get(const std::string_view &url, http::response<http::dynamic_body> &res, beast::flat_buffer &buffer) {
+//   boost::url_view u(url);
+//   const auto fullpath = get_url_full_path(url);
 
-  const size_t path_slash_pos = u.path().find("/");
-  const auto host_from_path = u.path().substr(0, path_slash_pos);
-  const auto host = !u.scheme().empty() ? u.host() : host_from_path;
-  if (host.empty()) throw std::runtime_error("Could not get host from url " + std::string(url));
+//   const size_t path_slash_pos = u.path().find("/");
+//   const auto host_from_path = u.path().substr(0, path_slash_pos);
+//   const auto host = !u.scheme().empty() ? u.host() : host_from_path;
+//   if (host.empty()) throw std::runtime_error("Could not get host from url " + std::string(url));
 
-  if (u.scheme().empty() || u.scheme() == "https") {
-    const auto port = !u.port().empty() ? u.port() : "443";
-    println(host, port);
+//   if (u.scheme().empty() || u.scheme() == "https") {
+//     const auto port = !u.port().empty() ? u.port() : "443";
+//     println(host, port);
 
-    net::io_context ioc;
-    ssl::context ctx(ssl::context::tlsv12_client);
+//     net::io_context ioc;
+//     ssl::context ctx(ssl::context::tlsv12_client);
 
-    ctx.set_verify_mode(ssl::context::verify_peer | ssl::context::verify_fail_if_no_peer_cert);
-    ctx.set_default_verify_paths();
-    boost::certify::enable_native_https_server_verification(ctx);
+//     ctx.set_verify_mode(ssl::context::verify_peer | ssl::context::verify_fail_if_no_peer_cert);
+//     ctx.set_default_verify_paths();
+//     boost::certify::enable_native_https_server_verification(ctx);
 
-    beast::ssl_stream<beast::tcp_stream> stream(ioc, ctx);
-    //boost::certify::set_server_hostname(beast::get_lowest_layer(stream), host);
-    //boost::certify::sni_hostname(beast::get_lowest_layer(stream), host);
+//     beast::ssl_stream<beast::tcp_stream> stream(ioc, ctx);
+//     //boost::certify::set_server_hostname(beast::get_lowest_layer(stream), host);
+//     //boost::certify::sni_hostname(beast::get_lowest_layer(stream), host);
 
-    const auto host_str = std::string(host);
-    if (!SSL_set_tlsext_host_name(stream.native_handle(), host_str.c_str())) {
-      beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
-      throw beast::system_error{ec};
-    }
+//     const auto host_str = std::string(host);
+//     if (!SSL_set_tlsext_host_name(stream.native_handle(), host_str.c_str())) {
+//       beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
+//       throw beast::system_error{ec};
+//     }
 
-    tcp::resolver resolver(ioc);
-    auto const results = resolver.resolve(host, port);
-    beast::get_lowest_layer(stream).connect(results);
-    stream.handshake(ssl::stream_base::client);
+//     tcp::resolver resolver(ioc);
+//     auto const results = resolver.resolve(host, port);
+//     beast::get_lowest_layer(stream).connect(results);
+//     stream.handshake(ssl::stream_base::client);
 
-    http::request<http::string_body> req{http::verb::get, fullpath, 11};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    http::write(stream, req);
+//     http::request<http::string_body> req{http::verb::get, fullpath, 11};
+//     req.set(http::field::host, host);
+//     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+//     http::write(stream, req);
 
-    http::read(stream, buffer, res);
+//     http::read(stream, buffer, res);
 
-    beast::error_code ec;
-    stream.shutdown(ec);
-    // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
-    // https://github.com/boostorg/beast/issues/824
-    if (ec == net::error::eof || ec == ssl::error::stream_truncated) ec = {};
-    if (ec) throw beast::system_error{ec};
-  } else {
-    const auto port = !u.port().empty() ? u.port() : "80";
-    println(host, port);
+//     beast::error_code ec;
+//     stream.shutdown(ec);
+//     // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
+//     // https://github.com/boostorg/beast/issues/824
+//     if (ec == net::error::eof || ec == ssl::error::stream_truncated) ec = {};
+//     if (ec) throw beast::system_error{ec};
+//   } else {
+//     const auto port = !u.port().empty() ? u.port() : "80";
+//     println(host, port);
 
-    net::io_context ioc; 
-    tcp::resolver resolver(ioc);
-    beast::tcp_stream stream(ioc);
-    auto const results = resolver.resolve(host, port);
-    stream.connect(results);
+//     net::io_context ioc; 
+//     tcp::resolver resolver(ioc);
+//     beast::tcp_stream stream(ioc);
+//     auto const results = resolver.resolve(host, port);
+//     stream.connect(results);
 
-    http::request<http::string_body> req{http::verb::get, fullpath, 11};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+//     http::request<http::string_body> req{http::verb::get, fullpath, 11};
+//     req.set(http::field::host, host);
+//     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
-    println(req);
+//     println(req);
 
-    http::write(stream, req);
-    http::read(stream, buffer, res);
+//     http::write(stream, req);
+//     http::read(stream, buffer, res);
 
-    beast::error_code ec;
-    stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+//     beast::error_code ec;
+//     stream.socket().shutdown(tcp::socket::shutdown_both, ec);
 
-    if(ec && ec != beast::errc::not_connected) throw beast::system_error{ec};
-  }
-}
-
-net::awaitable<std::tuple<http::response<http::dynamic_body>, beast::flat_buffer>>
-//net::awaitable<void> 
-get(const std::string_view &url) {
-  boost::url_view u(url);
-  const auto fullpath = get_url_full_path(url);
-
-  const size_t path_slash_pos = u.path().find("/");
-  const auto host_from_path = u.path().substr(0, path_slash_pos);
-  const auto host = !u.scheme().empty() ? u.host() : host_from_path;
-  const bool is_https = u.scheme().empty() || u.scheme() == "https";
-  const auto port = !u.port().empty() ? u.port() : (is_https ? "443" : "80");
-  //println(host, port);
-  if (host.empty()) throw std::runtime_error("Could not get host from url " + std::string(url));
-
-  const auto &ioc = co_await net::this_coro::executor;
-  tcp::resolver resolver(ioc);
-  auto const results = co_await resolver.async_resolve(host, port, net::use_awaitable);
-
-  beast::flat_buffer buffer;
-  http::response<http::dynamic_body> res;
-
-  if (is_https) {
-    ssl::context ctx(ssl::context::tlsv12_client);
-    ctx.set_verify_mode(ssl::context::verify_peer | ssl::context::verify_fail_if_no_peer_cert);
-    ctx.set_default_verify_paths();
-    boost::certify::enable_native_https_server_verification(ctx);
-
-    beast::ssl_stream<beast::tcp_stream> stream(ioc, ctx);
-    //boost::certify::set_server_hostname(beast::get_lowest_layer(stream), host);
-    //boost::certify::sni_hostname(beast::get_lowest_layer(stream), host);
-
-    const auto host_str = std::string(host);
-    if (!SSL_set_tlsext_host_name(stream.native_handle(), host_str.c_str())) {
-      beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
-      throw beast::system_error{ec};
-    }
-
-    auto ep = co_await beast::get_lowest_layer(stream).async_connect(results, net::use_awaitable);
-    co_await stream.async_handshake(ssl::stream_base::client, net::use_awaitable);
-
-    http::request<http::string_body> req{http::verb::get, fullpath, 11};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    co_await http::async_write(stream, req, net::use_awaitable);
-
-    co_await http::async_read(stream, buffer, res, net::use_awaitable);
-
-    //println(res);
-
-    beast::error_code ec;
-    stream.shutdown(ec);
-    // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
-    // https://github.com/boostorg/beast/issues/824
-    if (ec == net::error::eof || ec == ssl::error::stream_truncated) ec = {};
-    if (ec) throw beast::system_error{ec};
-  } else {
-    beast::tcp_stream stream(ioc);
-    auto ep = co_await stream.async_connect(results, net::use_awaitable);
-
-    http::request<http::string_body> req{http::verb::get, fullpath, 11};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    co_await http::async_write(stream, req, net::use_awaitable);
-
-    co_await http::async_read(stream, buffer, res, net::use_awaitable);
-
-    beast::error_code ec;
-    stream.socket().shutdown(tcp::socket::shutdown_both, ec);
-
-    if(ec && ec != beast::errc::not_connected) throw beast::system_error{ec};
-  }
-
-  co_return std::make_tuple(std::move(res), std::move(buffer));
-}
-
-net::awaitable<std::tuple<http::response<http::dynamic_body>, beast::flat_buffer>>
-//net::awaitable<void> 
-post(const std::string_view url, const std::string_view type, std::string content) {
-  boost::url_view u(url);
-  const auto fullpath = get_url_full_path(url);
-
-  const size_t path_slash_pos = u.path().find("/");
-  const auto host_from_path = u.path().substr(0, path_slash_pos);
-  const auto host = !u.scheme().empty() ? u.host() : host_from_path;
-  const bool is_https = u.scheme().empty() || u.scheme() == "https";
-  const auto port = !u.port().empty() ? u.port() : (is_https ? "443" : "80");
-  //println(host, port);
-  if (host.empty()) throw std::runtime_error("Could not get host from url " + std::string(url));
-
-  const auto &ioc = co_await net::this_coro::executor;
-  tcp::resolver resolver(ioc);
-  auto const results = co_await resolver.async_resolve(host, port, net::use_awaitable);
-
-  beast::flat_buffer buffer;
-  http::response<http::dynamic_body> res;
-
-  if (is_https) {
-    ssl::context ctx(ssl::context::tlsv12_client);
-    ctx.set_verify_mode(ssl::context::verify_peer | ssl::context::verify_fail_if_no_peer_cert);
-    ctx.set_default_verify_paths();
-    boost::certify::enable_native_https_server_verification(ctx);
-
-    beast::ssl_stream<beast::tcp_stream> stream(ioc, ctx);
-    //boost::certify::set_server_hostname(beast::get_lowest_layer(stream), host);
-    //boost::certify::sni_hostname(beast::get_lowest_layer(stream), host);
-
-    const auto host_str = std::string(host);
-    if (!SSL_set_tlsext_host_name(stream.native_handle(), host_str.c_str())) {
-      beast::error_code ec{static_cast<int>(::ERR_get_error()), net::error::get_ssl_category()};
-      throw beast::system_error{ec};
-    }
-
-    auto ep = co_await beast::get_lowest_layer(stream).async_connect(results, net::use_awaitable);
-    co_await stream.async_handshake(ssl::stream_base::client, net::use_awaitable);
-
-    http::request<http::string_body> req{http::verb::post, fullpath, 11};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http::field::content_type, type);
-    req.set(http::field::content_length, std::to_string(content.size()));
-    req.body() = std::move(content);
-    co_await http::async_write(stream, req, net::use_awaitable);
-
-    co_await http::async_read(stream, buffer, res, net::use_awaitable);
-
-    //println(res);
-
-    beast::error_code ec;
-    stream.shutdown(ec);
-    // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
-    // https://github.com/boostorg/beast/issues/824
-    if (ec == net::error::eof || ec == ssl::error::stream_truncated) ec = {};
-    if (ec) throw beast::system_error{ec};
-  } else {
-    beast::tcp_stream stream(ioc);
-    auto ep = co_await stream.async_connect(results, net::use_awaitable);
-
-    http::request<http::string_body> req{http::verb::post, fullpath, 11};
-    req.set(http::field::host, host);
-    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    req.set(http::field::content_type, type);
-    req.set(http::field::content_length, std::to_string(content.size()));
-    req.body() = std::move(content);
-    co_await http::async_write(stream, req, net::use_awaitable);
-
-    co_await http::async_read(stream, buffer, res, net::use_awaitable);
-
-    beast::error_code ec;
-    stream.socket().shutdown(tcp::socket::shutdown_both, ec);
-
-    if(ec && ec != beast::errc::not_connected) throw beast::system_error{ec};
-  }
-
-  co_return std::make_tuple(std::move(res), std::move(buffer));
-}
+//     if(ec && ec != beast::errc::not_connected) throw beast::system_error{ec};
+//   }
+// }
 
 net::awaitable<void> server(const uint32_t port) {
   const auto &ioc = co_await net::this_coro::executor;
@@ -361,13 +207,13 @@ int main(int argc, char** argv) {
   net::io_context ioc;
   //net::signal_set signals(ioc, SIGINT, SIGTERM);
   //net::co_spawn(ioc, get(host), net::detached);
-  //auto fut = net::co_spawn(ioc, get(host), net::use_future);
+  auto fut = net::co_spawn(ioc, liteh::get(host), net::use_future);
   const std::string_view type = "text/plain";
-  auto fut = net::co_spawn(ioc, post(host, type, "Hello world"), net::use_future);
+  //auto fut = net::co_spawn(ioc, liteh::post(host, type, "Hello world"), net::use_future);
 
   net::co_spawn(ioc, server(5050), net::detached);
   {
-    //time_log log("ioc.run()");
+    time_log log("ioc.run()");
     ioc.run();
   }
 
